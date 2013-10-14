@@ -1,0 +1,123 @@
+MODULE main
+CONSTANTS
+    critical,
+    idle,
+    lock,
+    releasing,
+    requesting,
+    unlock;
+VAR
+  state: {
+    critical_idle_lock_lock,
+    idle_critical_lock_lock,
+    idle_idle_unlock_unlock,
+    idle_releasing_unlock_lock,
+    idle_requesting_lock_unlock,
+    releasing_idle_unlock_lock,
+    releasing_requesting_lock_lock,
+    requesting_idle_lock_unlock,
+    requesting_releasing_lock_lock,
+    __terminal__
+  };
+ASSIGN
+  init(state) := {
+    idle_idle_unlock_unlock
+  };
+  next(state):= case
+    state = critical_idle_lock_lock: {
+      -- event release1
+      releasing_idle_unlock_lock
+    };
+    state = idle_critical_lock_lock: {
+      -- event release1
+      idle_releasing_unlock_lock
+    };
+    state = idle_idle_unlock_unlock: {
+      -- event request1
+      idle_requesting_lock_unlock,
+      -- event request1
+      requesting_idle_lock_unlock
+    };
+    state = idle_releasing_unlock_lock: {
+      -- event release2
+      idle_idle_unlock_unlock,
+      -- event request1
+      requesting_releasing_lock_lock
+    };
+    state = idle_requesting_lock_unlock: {
+      -- event request2
+      idle_critical_lock_lock
+    };
+    state = releasing_idle_unlock_lock: {
+      -- event release2
+      idle_idle_unlock_unlock,
+      -- event request1
+      releasing_requesting_lock_lock
+    };
+    state = releasing_requesting_lock_lock: {
+      -- event release2
+      idle_requesting_lock_unlock
+    };
+    state = requesting_idle_lock_unlock: {
+      -- event request2
+      critical_idle_lock_lock
+    };
+    state = requesting_releasing_lock_lock: {
+      -- event release2
+      requesting_idle_lock_unlock
+    };
+    TRUE: __terminal__;
+  esac;
+DEFINE
+  user1 := case
+    state = critical_idle_lock_lock: critical;
+    state = idle_critical_lock_lock: idle;
+    state = idle_idle_unlock_unlock: idle;
+    state = idle_releasing_unlock_lock: idle;
+    state = idle_requesting_lock_unlock: idle;
+    state = releasing_idle_unlock_lock: releasing;
+    state = releasing_requesting_lock_lock: releasing;
+    state = requesting_idle_lock_unlock: requesting;
+    state = requesting_releasing_lock_lock: requesting;
+    TRUE: __terminal__;
+  esac;
+  user2 := case
+    state = critical_idle_lock_lock: idle;
+    state = idle_critical_lock_lock: critical;
+    state = idle_idle_unlock_unlock: idle;
+    state = idle_releasing_unlock_lock: releasing;
+    state = idle_requesting_lock_unlock: requesting;
+    state = releasing_idle_unlock_lock: idle;
+    state = releasing_requesting_lock_lock: requesting;
+    state = requesting_idle_lock_unlock: idle;
+    state = requesting_releasing_lock_lock: releasing;
+    TRUE: __terminal__;
+  esac;
+  resource1 := case
+    state = critical_idle_lock_lock: lock;
+    state = idle_critical_lock_lock: lock;
+    state = idle_idle_unlock_unlock: unlock;
+    state = idle_releasing_unlock_lock: unlock;
+    state = idle_requesting_lock_unlock: lock;
+    state = releasing_idle_unlock_lock: unlock;
+    state = releasing_requesting_lock_lock: lock;
+    state = requesting_idle_lock_unlock: lock;
+    state = requesting_releasing_lock_lock: lock;
+    TRUE: __terminal__;
+  esac;
+  resource2 := case
+    state = critical_idle_lock_lock: lock;
+    state = idle_critical_lock_lock: lock;
+    state = idle_idle_unlock_unlock: unlock;
+    state = idle_releasing_unlock_lock: lock;
+    state = idle_requesting_lock_unlock: unlock;
+    state = releasing_idle_unlock_lock: lock;
+    state = releasing_requesting_lock_lock: lock;
+    state = requesting_idle_lock_unlock: unlock;
+    state = requesting_releasing_lock_lock: lock;
+    TRUE: __terminal__;
+  esac;
+  deadlock := case
+    state = __terminal__ : TRUE;
+    TRUE: FALSE;
+  esac;

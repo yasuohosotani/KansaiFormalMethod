@@ -1,0 +1,62 @@
+MODULE main
+CONSTANTS
+    critical,
+    nonCritical;
+VAR
+  state: {
+    critical_critical,
+    critical_nonCritical,
+    nonCritical_critical,
+    nonCritical_nonCritical,
+    __terminal__
+  };
+ASSIGN
+  init(state) := {
+    nonCritical_nonCritical
+  };
+  next(state):= case
+    state = critical_critical: {
+      -- event release
+      critical_nonCritical,
+      -- event release
+      nonCritical_critical
+    };
+    state = critical_nonCritical: {
+      -- event request
+      critical_critical,
+      -- event release
+      nonCritical_nonCritical
+    };
+    state = nonCritical_critical: {
+      -- event request
+      critical_critical,
+      -- event release
+      nonCritical_nonCritical
+    };
+    state = nonCritical_nonCritical: {
+      -- event request
+      critical_nonCritical,
+      -- event request
+      nonCritical_critical
+    };
+    TRUE: __terminal__;
+  esac;
+DEFINE
+  ts1 := case
+    state = critical_critical: critical;
+    state = critical_nonCritical: critical;
+    state = nonCritical_critical: nonCritical;
+    state = nonCritical_nonCritical: nonCritical;
+    TRUE: __terminal__;
+  esac;
+  ts2 := case
+    state = critical_critical: critical;
+    state = critical_nonCritical: nonCritical;
+    state = nonCritical_critical: critical;
+    state = nonCritical_nonCritical: nonCritical;
+    TRUE: __terminal__;
+  esac;
+  deadlock := case
+    state = __terminal__ : TRUE;
+    TRUE: FALSE;
+  esac;

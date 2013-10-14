@@ -1,0 +1,576 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html><head>
+
+
+<meta content="text/html; charset=UTF-8" http-equiv="content-type"><title>Eclipse XText を利用した状態遷移モデルの記述とモデル・チェッカの利用</title></head><body>
+<h1>Eclipse XText を利用した状態遷移モデルの記述とモデル・チェッカの利用に向けて</h1>
+
+2013年10月14日 小林修<br>
+<h2>取り組むべき課題</h2>
+
+状態遷移でモデル化された複数のコンポーネントが部分的に同期しつつ並列に動作するようなシステムの設計において、その性質を状態遷移モデルのレベルで検
+証する為の手法として「モデル検査」があり、その為のツールとして幾つかの「モデル・チェッカ」が実際に利用されています。しかし、これらのツールで検査を
+行う為には、ツール特有のモデル記述言語を習得する必要があり、モデル検査を専門としない一般のソフトウェア開発者に取っては、やや敷居が高いものになっ
+ています。<br>
+ここでは、状態遷移モデルを記述する為に、一般のソフトウェア開発者のもつ状態遷移システムのイメージを直接的に記述できる簡易言語表現を定義し、それによって記述された状態遷移モデルを特定のモデル・チェッカ（ここ
+では<a href="http://nusmv.fbk.eu/">NuSMV</a>）の入力形式に自動変換することで、モデル検査の技術を一般のソフトウェア開発においてより利用しやすくすることを目指します。<br>
+<h2>環境について</h2>
+状態遷移モデル記述言語の定義とモデル・チェッカの入力形式へのジェネレータを作成する環境として、<a href="http://www.eclipse.org/Xtext/">Eclipse XText </a>を使います。XText の特徴としては、以下のものがあります。<br>
+<ul>
+  <li>無償で使えるオープンソース・プロジェクト。</li>
+  <li>Windows、Linux、Mac のどれでも使えるマルチ・プラットフォーム。</li>
+  <li>BNF記法に似た記述法により独自言語の文法定義が簡単にできる。</li>
+  <li>定義された文法の構成要素を表現するJavaクラスが自動生成され、Javaプログラムで簡単に操作できるようになる。</li>
+  <li>定義した独自言語による記述をサポートする専用エディタが自動生成される。</li>
+  <li>定義した独自言語による記述から別の形式（ここではモデル・チェッカのモデル記法）に変換するためのジェネレータを作成するための簡易言語（XTendと呼ばれる）が用意されている。</li>
+</ul>
+以上のことから、Eclipse XText をインストールするだけですぐに独自言語の定義を始められ、言語の定義とジェネレータの作成を少しずつ段階的に進めていくことができます。<br>
+ただし、ジェネレータの作成にはJavaのプログラミングが必要となります。<br>
+<br>
+<h2>状態遷移モデルの記述法</h2>
+<h3>状態遷移マシンの定義</h3>
+ここでは、ひとつの状態遷移マシンを以下の4つの要素の組み合わせとして表現します。<br>
+<ul>
+  <li>状態の集合</li>
+  <li>イベントの集合</li>
+  <li>遷移の集合</li>
+  <li>初期状態の集合</li>
+</ul>
+これらの要素から成るひとつの状態遷移マシンを、以下のように記述することにします。<br>
+<br>
+<div style="margin-left: 40px;"><span style="font-family: Courier New;">transition system 状態遷移マシン名 {</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; states { 状態名の並び }</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; events { イベント名の並び }</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; transitions {</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; 遷移元状態名 * イベント名 -&gt; 遷移先状態名</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; （繰り返し）</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; }</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; initial states { 初期状態名の並び }</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">}</span><br style="font-family: Courier New;">
+</div>
+<br>
+<h3>
+状態遷移マシンの記述例</h3>
+以下の状態遷移図で表される状態遷移マシンを上記の記法で記述してみます。<br>
+<div style="margin-left: 40px;"><img src="images/ts1.png" style="width: 329px; height: 273px;" alt="状態遷移図１"><br>
+</div>
+
+<br>
+<div style="margin-left: 40px;"><span style="font-family: Courier New;">transition system ts1 {</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; states { nonCritical critical }</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; events { request release }</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; transitions {</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; nonCritical * request -&gt; critical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; critical * release -&gt; nonCritical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; }</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; initial states { nonCritical }</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">}</span><br style="font-family: Courier New;">
+</div>
+<br>
+<h3>状態遷移マシンの合成</h3>
+システムが複数の状態遷移マシンから成る場合、その組み合わせ方には以下の２通りがあります。<br>
+<ul>
+  <li>各状態遷移マシンの遷移が一斉に同期して発生する。</li>
+  <li>各状態遷移マシンの遷移が交互に不特定の順序で発生する。</li>
+</ul>
+また、状態遷移マシンの個々の遷移に関しても、以下の２通りがあります。<br>
+<ul>
+  <li>他の状態遷移マシンの遷移とは無関係に、自身の状態によってのみ遷移が決まるもの。</li>
+  <li>他の状態遷移マシンの特定の遷移と同時にしか遷移できないもの（同期的遷移）。</li>
+</ul>
+ここでは、各状態遷移マシンの遷移が交互に不特定順序で発生し、一部の遷移について同期的である場合を考えます。遷移を同期させるかどうかは、その遷移の発生要因となるイベントが、合成対象の状態遷移マシンに共通のイベントかどうかで決まるものとします。<br>
+<br>
+状態遷移マシンの合成を以下の記号で表します。<br>
+<br>
+<div style="margin-left: 40px;"><span style="font-family: Courier New;">TS1 || TS2</span><br style="font-family: Courier New;">
+</div>
+<br>
+この記法では、両方の状態遷移マシンの定義に含まれるイベントによる遷移は、両方の状態遷移マシンが共に遷移可能な場合のみ同時に遷移し（同期的遷移）、一方のみに含まれるイベントによる遷移は、個々の状態遷移マシン毎に遷移します。<br>
+<br>
+<div style="margin-left: 40px;"><span style="font-family: Courier New;">TS1 ||| TS3</span><br style="font-family: Courier New;">
+</div>
+<br>
+この記法では、イベントが両方の状態遷移マシンに含まれるかどうか関係なしに、個々の状態遷移マシン毎に遷移します。<br>
+<br>
+例として、以下の２つの状態遷移マシンを上記の２通りの方法で合成した結果を示します。<br>
+状態遷移マシン sample1<br>
+<div style="margin-left: 40px;"><img style="width: 299px; height: 150px;" alt="状態遷移マシンsample1" src="images/sample1.png"><br>
+</div>
+<br>
+状態遷移マシン sample2<br>
+
+<div style="margin-left: 40px;"><img style="width: 299px; height: 150px;" alt="状態遷移マシンsample2" src="images/sample2.png"><br>
+</div>
+<span style="font-family: Courier New;">sample1 || sample2</span><br>
+<div style="margin-left: 40px;"><br>
+</div>
+<div style="margin-left: 40px;"><img style="width: 482px; height: 260px;" alt="sample1 || sample2" src="images/handshake.png"><br>
+</div>
+<span style="font-family: Courier New;">sample1 ||| sample2</span><br>
+<div style="margin-left: 40px;"><img style="width: 482px; height: 260px;" alt="sample1 ||| sample2" src="images/interleave.png"><br>
+</div>
+<br>
+<h3>
+複数の状態遷移マシンから成るシステムの定義</h3>
+
+複数の状態遷移マシンから成るシステムの定義は以下のように記述します。<br>
+<br>
+<div style="margin-left: 40px;"><span style="font-family: Courier New;">mode モデル名 {</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; 状態遷移マシンの定義</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; （繰り返し）</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; main = 状態遷移マシンの合成</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">}</span><br style="font-family: Courier New;">
+</div>
+<br>
+例として、以下の３つの状態遷移マシンを合成したシステムの記述例を示します。<br>
+ここでは、それぞれ独立して動く２つの状態遷移マシンがあり、それぞれ２つの状態 noncritical と critical
+を交互に行き来します。この２つが同時に状態 critical に入らないように、調停者となる状態遷移マシン arbiter
+をイベントで同期を取る形で合成します。<br>
+<div style="margin-left: 40px;"><img src="images/ts1.png" style="width: 329px; height: 273px;" alt="状態遷移図1"><br>
+</div>
+<div style="margin-left: 40px;"><img src="images/ts2.png" style="width: 329px; height: 273px;" alt="状態遷移図２"><br>
+</div>
+<div style="margin-left: 40px;"><img src="images/arbiter.png" style="width: 329px; height: 273px;" alt="状態遷移図３"><br>
+</div>
+<br>
+<br>
+<div style="margin-left: 40px;"><span style="font-family: Courier New;">model CriticalSections2 {</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; transition system ts1 {</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; states { nonCritical critical }</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; events { request release }</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; transitions {</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; nonCritical * request -&gt; critical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; critical * release -&gt; nonCritical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; }</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; initial states { nonCritical }</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; }</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; transition system ts2 {</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; states { nonCritical critical }</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; events { request release }</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; transitions {</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; nonCritical * request -&gt; critical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; critical * release -&gt; nonCritical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; }</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; initial states { nonCritical }</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; }</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; transition system arbiter {</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; states { unlock lock }</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; events { request release }</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; transitions {</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; unlock * request -&gt; lock</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; lock * release -&gt; unlock</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; }</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; initial states { unlock }</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; }</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; main = (ts1 ||| ts2) || arbiter</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">}</span><br style="font-family: Courier New;">
+</div>
+<br>
+ここで、状態遷移マシンの合成 <span style="font-family: Courier New;">"(ts1 ||| ts2) || arbiter"</span> では、以下の２段階で合成が行われます。<br>
+まず、<span style="font-family: Courier New;">"ts1 ||| ts2"</span> により、t1 と t2 の２つが、それぞれ独自に遷移する形で合成されて、以下の状態遷移マシンを形成します。<br>
+<div style="margin-left: 40px;"><img style="width: 556px; height: 426px;" alt="ts1とts2の非同期合成" src="images/ts1_ts2.png"><br>
+</div>
+これに、arbiter の状態遷移マシンをイベントで同期させる形で合成すると、全体の遷移が、２つのイベント request と release が交互に発生する形に制限されて、以下のようになります。<br>
+<div style="margin-left: 40px;"><img style="width: 605px; height: 335px;" alt="ts1とts2とarbiterの合成" src="images/ts1_ts2_arbiter.png"><br>
+</div>
+これにより、ts1 と ts2 が同時に状態 critical に入らないよう制御されます。<br>
+<h3>XText による文法定義</h3>
+上記の記述法をXTextで文法定義すると、以下のようになります。<br>
+<div style="margin-left: 40px;"><a href="sources/TransitionSystem.xtext">TransitionSystem.xtext</a><br>
+</div>
+
+<h2>NuSMV入力形式への変換</h2>
+上記で定義した状態遷移モデルを NuSMVの入力言語の形式に変換するためのジェネレータを、Eclipse XTtext では、XTend というJavaを拡張した言語によって作成することができます。<br>
+<br>
+XTendによるジェネレータの記述<br>
+<div style="margin-left: 40px;"><a href="sources/TransitionSystemGenerator.xtend">TransitionSystemGenerator.xtend</a><br>
+</div>
+<br>
+ジェネレータから呼び出すヘルパークラス<br>
+<div style="margin-left: 40px;"><a href="sources/TransitionSystemComposer.java">TransitionSystemComposer.java</a><br>
+</div>
+<br>
+このジェネレータによって上記の例から変換された NuSMV の入力言語形式<br>
+<div style="margin-left: 40px;"><a href="sources/CriticalSections2.smv">CriticalSections2.smv</a><br>
+</div>
+<br>
+ここで、変換結果の NuSMV 形式の記述は、以下のように構成されています。<br>
+<br>
+<div style="margin-left: 40px;">MODULE main<br>
+CONSTANTS<br>
+&nbsp;&nbsp;&nbsp; 各状態遷移マシンの個別の状態を表すシンボルの定義<br>
+VAR<br>
+&nbsp;&nbsp;&nbsp; 合成結果の状態遷移マシンの状態を表す変数 state の定義<br>
+ASSIGN<br>
+&nbsp;&nbsp;&nbsp; 変数 state の初期値設定<br>
+&nbsp;&nbsp;&nbsp; 変数 state の値の変化（合成結果のシステムの遷移）の定義<br>
+DEFINE<br>
+&nbsp;&nbsp;&nbsp; 合成結果の状態遷移マシンの状態と個別の状態遷移マシンの状態の対応関係の定義<br>
+&nbsp;&nbsp;&nbsp; 合成結果の状態遷移マシンのデッドロック検出用の変数の定義<br>
+</div>
+<h2>NuSMVによるモデル検査</h2>
+上記のジェネレータによって変換されたNuSMVの入力言語記述を実際に NuSMV に読み込ませて、モデルを検査することができます。<br>
+ここでは、NuSMV の対話モード（オプション -int を指定する）により、検査を実行する例を示します。<br>
+<h3>排他制御の例</h3>
+排他制御のモデルの検査の様子を示すため、まず、排他制御が行われない、不完全なモデルの検査を試します。<br>
+<br>
+モデルの記述<br>
+<div style="margin-left: 40px;"><a href="sources/CriticalSection1.ts">CriticalSection1.ts</a><br>
+</div>
+<br>
+合成結果の状態遷移マシン<br>
+<div style="margin-left: 40px;"><img style="width: 556px; height: 426px;" alt="ts1とts2の非同期合成" src="images/ts1_ts2.png"><br>
+</div>
+<br>
+NuSMV形式への変換結果<br>
+<div style="margin-left: 40px;"><a href="sources/CriticalSections1.smv">CriticalSections1.smv</a><br>
+</div>
+<br>
+ここで検査したい、排他制御として必要な条件「ts1 と ts2 が同時に状態 critical
+に入ることが無いこと」は、NuSMVがサポートする検査式の形式では以下のように表されます。（NuSMV では、CTL
+(Computationnal Tree Logic) と LTL (Linear Temporal Logic)
+の２通りの記述が可能なので、それぞれでの記述を示します。）<br>
+<div style="margin-left: 40px;">CTL による記述： AG !((ts1 = critical) &amp; (ts2 = critical))<br>
+LTL による記述： G !((ts1 = critical) &amp; (ts2 = critical))<br>
+</div>
+<br>
+ます、NuSMV を対話モードで起動し、モデルファイルを読み込ませます。<br>
+<div style="margin-left: 40px;"><span style="font-family: Courier New;">$ NuSMV -int CriticalSections1.smv </span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+
+NuSMV &gt; go</span><br>
+</div>
+
+<br>
+次に、NuSMV のコマンド check_ctlspec を使って上記の CTL検査式を検査します。<br>
+この場合、排他制御がされていないため、検査は「失敗」し、反例となる状態遷移例が表示されます。<br>
+<div style="margin-left: 40px;"><span style="font-family: Courier New;">NuSMV &gt; check_ctlspec -p "AG !((ts1 = critical) &amp; (ts2 = critical))"</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+
+-- specification AG !(ts1 = critical &amp; ts2 = critical)&nbsp; is false</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+
+-- as demonstrated by the following execution sequence</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+
+Trace Description: CTL Counterexample </span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+
+Trace Type: Counterexample </span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+
+-&gt; State: 1.1 &lt;-</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+
+&nbsp; state = nonCritical_nonCritical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+
+&nbsp; deadlock = FALSE</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+
+&nbsp; ts2 = nonCritical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+
+&nbsp; ts1 = nonCritical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+
+-&gt; State: 1.2 &lt;-</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+
+&nbsp; state = critical_nonCritical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+
+&nbsp; ts1 = critical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+
+-&gt; State: 1.3 &lt;-</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+
+&nbsp; state = critical_critical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+
+&nbsp; ts2 = critical</span><br>
+</div>
+<br>
+同様に、NuSMV の check_ltlspec コマンドで上記の LTL検査式を検査してみます。<br>
+
+
+<div style="margin-left: 40px;"><span style="font-family: Courier New;">NuSMV &gt; check_ltlspec -p "G !((ts1 = critical) &amp; (ts2 = critical))"</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+-- specification&nbsp; G !(ts1 = critical &amp; ts2 = critical)&nbsp; is false</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+-- as demonstrated by the following execution sequence</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+Trace Description: LTL Counterexample </span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+Trace Type: Counterexample </span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+-&gt; State: 2.1 &lt;-</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp; state = nonCritical_nonCritical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp; deadlock = FALSE</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp; ts2 = nonCritical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp; ts1 = nonCritical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+-- Loop starts here</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+-&gt; State: 2.2 &lt;-</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp; state = critical_nonCritical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp; ts1 = critical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+-&gt; State: 2.3 &lt;-</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp; state = critical_critical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp; ts2 = critical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+-- Loop starts here</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+-&gt; State: 2.4 &lt;-</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp; state = critical_nonCritical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp; ts2 = nonCritical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+-&gt; State: 2.5 &lt;-</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp; state = nonCritical_nonCritical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp; ts1 = nonCritical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+-&gt; State: 2.6 &lt;-</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp; state = critical_nonCritical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp; ts1 = critical</span><br>
+
+</div>
+<br>
+次に、排他制御を加えたモデルの検査を試します。<br>
+<br>
+モデルの記述<br>
+<div style="margin-left: 40px;"><a href="sources/CriticalSection2.ts">CriticalSection2.ts</a><br>
+</div>
+<br>
+
+
+合成結果の状態遷移マシン<br>
+<div style="margin-left: 40px;"><img style="width: 605px; height: 335px;" alt="ts1とts2とarbiterの合成" src="images/ts1_ts2_arbiter.png"><br>
+</div>
+<br>
+NuSMV形式への変換結果<br>
+<div style="margin-left: 40px;"><a href="sources/CriticalSections2.smv">CriticalSections2.smv</a><br>
+</div>
+<br>
+NuSMV による検査結果<br>
+<div style="margin-left: 40px;"><span style="font-family: Courier New;">
+$ NuSMV -int CriticalSections2.smv </span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+NuSMV &gt; go</span><br style="font-family: Courier New;">
+<br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+NuSMV &gt; check_ctlspec -p "AG !((ts1 = critical) &amp; (ts2 = critical))"</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+-- specification AG !(ts1 = critical &amp; ts2 = critical)&nbsp; is true</span><br style="font-family: Courier New;">
+<br style="font-family: Courier New;">
+<span style="font-family: Courier New;">NuSMV &gt; check_ltlspec -p "G !((ts1 = critical) &amp; (ts2 = critical))"</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+-- specification&nbsp; G !(ts1 = critical &amp; ts2 = critical)&nbsp; is true</span><br>
+</div>
+<br>
+この場合、排他制御が効いて、上記の条件が満たされる事が示されました。<br>
+<br>
+<h3>デッドロック検出の例</h3>
+ここでは、ある作業を実行するために２つのリソースが同時に必要な状況で、２人のユーザが同時にその作業をしようとした場合に発生するデッドロックを例に取ります。<br>
+まずは、デッドロックの発生する不完全なモデルを検査します。<br>
+<br>
+モデルの記述<br>
+<div style="margin-left: 40px;"><a href="sources/ResourceContension1.ts">ResourceContension1.ts</a><br>
+</div>
+<br>
+このモデルでは、一方のユーザが resource1 → resouece2 の順序でリソースの獲得を試み、もう一方のユーザがそれとは逆に
+resourc2→ resouece1
+の順序でリソースの獲得を試みる為、それぞれが一つのリソースを獲得した状態で、他のリソースの解放を待つ睨み合いが発生します。<br>
+<div style="margin-left: 40px; font-family: Courier New;">&nbsp;&nbsp;&nbsp; transition system user1 {<br>
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;  ...<br>
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; transitions {<br>
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; idle * request1 -&gt;&nbsp; requesting<br>
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; requesting * request2 -&gt; critical<br>
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; ...<br>
+&nbsp;&nbsp;&nbsp; transition system user2 {<br>
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;  ...<br>
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; transitions {<br>
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; idle * <span style="color: red;">request2</span> -&gt;&nbsp; requesting<br>
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; requesting * <span style="color: red;">request1</span> -&gt; critical<br>
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; ...<br>
+<br>
+</div>
+<br>
+
+NuSMV形式への変換結果<br>
+<div style="margin-left: 40px;"><a href="sources/CriticalSections1.smv">ResourceContension1.smv</a><br>
+</div>
+<br>
+変換結果の NuSMV形式のモデル記述には、ジェネレータによって、全体システムが遷移先を失った事を示す状態 __terminal__ と、システムがその __terminal__ 状態に遷移したかどうかを示す論理変数 deadlock が追加されます。<br>
+<div style="margin-left: 40px;"><span style="font-family: Courier New;">VAR</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp; state: {</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; ...</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp;&nbsp;&nbsp; __terminal__</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp; };</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; ...</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">DEFINE</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; ...</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp; deadlock := case</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; state = __terminal__ : TRUE;</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp;&nbsp;&nbsp; TRUE: FALSE;</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">&nbsp; esac;</span><br>
+</div>
+そのため、「全体システムがデッドロックしないこと」を検査する検査式は、以下の様になります。<br>
+<div style="margin-left: 40px;">CTL による記述： AG ! deadlock<br>
+LTL による記述： G ! deadlock<br>
+</div>
+
+<br>
+NuSMV による検査結果<br>
+
+<div style="margin-left: 40px;"><span style="font-family: Courier New;">$ NuSMV -int ResourceContension1.smv <br>
+NuSMV &gt; go<br>
+<br>
+NuSMV &gt; check_ctlspec -p "AG ! deadlock"<br>
+-- specification AG !deadlock&nbsp; is false<br>
+-- as demonstrated by the following execution sequence<br>
+Trace Description: CTL Counterexample <br>
+Trace Type: Counterexample <br>
+-&gt; State: 1.1 &lt;-<br>
+&nbsp; state = idle_idle_unlock_unlock<br>
+&nbsp; deadlock = FALSE<br>
+&nbsp; resource2 = unlock<br>
+&nbsp; resource1 = unlock<br>
+&nbsp; user2 = idle<br>
+&nbsp; user1 = idle<br>
+-&gt; State: 1.2 &lt;-<br>
+&nbsp; state = idle_requesting_unlock_lock<br>
+&nbsp; resource2 = lock<br>
+&nbsp; user2 = requesting<br>
+-&gt; State: 1.3 &lt;-<br>
+&nbsp; state = requesting_requesting_lock_lock<br>
+&nbsp; resource1 = lock<br>
+&nbsp; user1 = requesting<br>
+-&gt; State: 1.4 &lt;-<br>
+&nbsp; state = __terminal__<br>
+&nbsp; deadlock = TRUE<br>
+&nbsp; resource2 = __terminal__<br>
+&nbsp; resource1 = __terminal__<br>
+&nbsp; user2 = __terminal__<br>
+&nbsp; user1 = __terminal__<br>
+<br>
+NuSMV &gt; check_ltlspec -p "G ! deadlock"<br>
+-- specification&nbsp; G !deadlock&nbsp; is false<br>
+-- as demonstrated by the following execution sequence<br>
+Trace Description: LTL Counterexample <br>
+Trace Type: Counterexample <br>
+-&gt; State: 1.1 &lt;-<br>
+&nbsp; state = idle_idle_unlock_unlock<br>
+&nbsp; deadlock = FALSE<br>
+&nbsp; resource2 = unlock<br>
+&nbsp; resource1 = unlock<br>
+&nbsp; user2 = idle<br>
+&nbsp; user1 = idle<br>
+-&gt; State: 1.2 &lt;-<br>
+&nbsp; state = idle_requesting_unlock_lock<br>
+&nbsp; resource2 = lock<br>
+&nbsp; user2 = requesting<br>
+-&gt; State: 1.3 &lt;-<br>
+&nbsp; state = requesting_requesting_lock_lock<br>
+&nbsp; resource1 = lock<br>
+&nbsp; user1 = requesting<br>
+-- Loop starts here<br>
+-&gt; State: 1.4 &lt;-<br>
+&nbsp; state = __terminal__<br>
+&nbsp; deadlock = TRUE<br>
+&nbsp; resource2 = __terminal__<br>
+&nbsp; resource1 = __terminal__<br>
+&nbsp; user2 = __terminal__<br>
+&nbsp; user1 = __terminal__<br>
+-- Loop starts here<br>
+-&gt; State: 1.5 &lt;-<br>
+-&gt; State: 1.6 &lt;-<br>
+<br>
+</span></div>
+<br>
+デッドロックを解消するために、user2 がリソースを獲得する順序を user1と同じにし、睨み合いが発生しないようにモデルを変更します。<br>
+<br>
+モデルの記述<br>
+<div style="margin-left: 40px;"><a href="sources/CriticalSection2.ts">ResourceContension2.ts</a><br>
+</div>
+<br>
+<div style="margin-left: 40px;">&nbsp;<span style="font-family: Courier New;">&nbsp;&nbsp; transition system user1 {</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;  ...</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; transitions {</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; idle * request1 -&gt;&nbsp; requesting</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; requesting * request2 -&gt; critical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; ...</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp;&nbsp;&nbsp; transition system user2 {</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;  ...</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; transitions {</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; idle * </span><span style="color: red; font-family: Courier New;">request1</span><span style="font-family: Courier New;"> -&gt;&nbsp; requesting</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; requesting * </span><span style="color: red; font-family: Courier New;">request2</span><span style="font-family: Courier New;"> -&gt; critical</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; ...</span><br>
+
+</div>
+<br>
+
+NuSMV形式への変換結果<br>
+<div style="margin-left: 40px;"><a href="sources/ResourceContension2.smv">ResourceContension2.smv</a><br>
+</div>
+<br>
+NuSMV による検査結果<br>
+<div style="margin-left: 40px;"><span style="font-family: Courier New;">$ NuSMV -int ResourceContension2.smv </span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">NuSMV &gt; go</span><br style="font-family: Courier New;">
+<br style="font-family: Courier New;">
+<span style="font-family: Courier New;">NuSMV &gt; check_ctlspec -p "AG ! deadlock"</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">-- specification AG !deadlock&nbsp; is true</span><br style="font-family: Courier New;">
+<br style="font-family: Courier New;">
+<span style="font-family: Courier New;">NuSMV &gt; check_ltlspec -p "G ! deadlock"</span><br style="font-family: Courier New;">
+<span style="font-family: Courier New;">-- specification&nbsp; G !deadlock&nbsp; is true</span><br>
+</div>
+<br>
+<h2>まとめ</h2>
+ここでは、複数の状態遷移マシンを合成して出来るシステムのモデルを記述する簡易言語の定義と、モデル・チェッカ NuSMV の入力形式への変換を、Eclipse XText を利用して（比較的）簡単に実現できることを確認しました。<br>
+ただし、まだ実用できるレベルには程遠い「練習課題」のレベルです。<br>
+現在の限界としては、以下があります。<br>
+<ul>
+  <li>XTendとJavaによるジェネレータの処理コスト（時間・メモリ量）が評価されていない。</li>
+  <li>合成する状態遷移マシンの数が増えると、合成結果のNuSMVモデルの状態名がどんどん長くなってしまう。</li>
+  <li>イベント発生に関するガード条件が指定できない。</li>
+  <li>システムの状態に関する検査が、構成要素の状態遷移マシンが「どの状態にいるか」の単純な命題に限定される。</li>
+</ul>
+
+など。<br>
+これらを課題として、今後、少しずつ拡張・充実を図っていきたいと思います。<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br><br>
+</body></html>
