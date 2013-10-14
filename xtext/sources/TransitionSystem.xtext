@@ -1,0 +1,69 @@
+grammar org.xtext.example.modelchecking2.TransitionSystem with org.eclipse.xtext.common.Terminals
+
+generate transitionSystem "http://www.xtext.org/example/modelchecking2/TransitionSystem"
+
+Model:
+	transitionModel = TransitionModel
+;
+
+TransitionModel:
+	'model' name = ID '{'
+		SetOfTransitionSystems += TransitionSystem*
+		configuration = Configuration
+	'}'
+;
+
+TransitionSystem:
+	'transition' 'system' name = ID '{'
+		setOfStates = SetOfStates
+		setOfEvents = SetOfEvents
+		setOfTransitions = SetOfTransitions
+		setOfInitialStates = SetOfInitialStates
+	'}'
+;
+
+SetOfStates:
+	'states' '{' states += State+ '}'
+;
+
+State:
+	name = ID
+;
+
+SetOfEvents:
+	'events' '{' events += Event* '}'
+;
+
+Event:
+	name = ID
+;
+
+SetOfTransitions:
+	'transitions' '{' transitions += Transition* '}'
+;
+
+Transition:
+	from = [State] '*' event = [Event] '->' to = [State]
+;
+
+SetOfInitialStates:
+	'initial' 'states' '{' initialStates += [State]+ '}'
+;
+
+Configuration:
+	'main' '=' composition = Composition
+;
+
+Composition:
+	leftOperand = CompositionOperand
+		(operator = CompositionOperator rightOperand = Composition)?
+;
+
+CompositionOperator:
+	'||' | '|||'
+;
+
+CompositionOperand:
+	transitionSystem = [TransitionSystem]
+	| '(' composition = Composition ')' 
+;
